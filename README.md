@@ -1,2 +1,2 @@
 # Manual
-한양's safety Manual with search function for work site distribution
+한양's Safety manual with search function for work site distribution
