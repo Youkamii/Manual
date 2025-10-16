@@ -1,48 +1,38 @@
 "use server"
 
-import { put } from "@vercel/blob"
 import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function uploadPDF(formData: FormData) {
+export async function savePDFMetadata({
+  title,
+  fileName,
+  blobUrl,
+  fileSize,
+}: {
+  title: string
+  fileName: string
+  blobUrl: string
+  fileSize: number
+}) {
   try {
-    const file = formData.get("file") as File
-    const title = formData.get("title") as string
-
-    if (!file || !title) {
-      return { success: false, error: "파일과 제목이 필요합니다." }
-    }
-
-    // PDF 파일인지 확인
-    if (file.type !== "application/pdf") {
-      return { success: false, error: "PDF 파일만 업로드 가능합니다." }
-    }
-
-    // Vercel Blob에 업로드
-    const blob = await put(file.name, file, {
-      access: "public",
-    })
-
-    // DB에 메타데이터 저장
     const result = await sql`
-      INSERT INTO documents (title, blob_url, file_size, page_count)
-      VALUES (${title}, ${blob.url}, ${file.size}, 0)
+      INSERT INTO documents (title, file_name, blob_url, file_size, total_pages)
+      VALUES (${title}, ${fileName}, ${blobUrl}, ${fileSize}, 0)
       RETURNING id
     `
 
-    console.log("[v0] PDF uploaded:", { id: result[0].id, title, url: blob.url })
+    console.log("[v0] PDF metadata saved:", { id: result[0].id, title, url: blobUrl })
 
     return {
       success: true,
       documentId: result[0].id,
-      blobUrl: blob.url,
     }
   } catch (error) {
-    console.error("[v0] Upload error:", error)
+    console.error("[v0] Save metadata error:", error)
     return {
       success: false,
-      error: "업로드 중 오류가 발생했습니다.",
+      error: "메타데이터 저장 중 오류가 발생했습니다.",
     }
   }
 }
