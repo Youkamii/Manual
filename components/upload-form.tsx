@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Upload, CheckCircle2 } from "lucide-react"
 import { savePDFMetadata } from "@/app/actions/upload"
+import { extractTextFromPDF } from "@/app/actions/extract-text"
 
 export function UploadForm() {
   const [title, setTitle] = useState("")
@@ -55,7 +56,7 @@ export function UploadForm() {
         throw new Error("업로드 실패")
       }
 
-      const { url } = await response.json()
+      const { url, documentId } = await response.json()
       console.log("[v0] File uploaded to Blob:", url)
 
       const result = await savePDFMetadata({
@@ -66,6 +67,15 @@ export function UploadForm() {
       })
 
       if (result.success) {
+        console.log("[v0] Starting text extraction for document:", result.documentId)
+        extractTextFromPDF(result.documentId!, url).then((extractResult) => {
+          if (extractResult.success) {
+            console.log("[v0] Text extraction completed:", extractResult.pagesProcessed, "pages")
+          } else {
+            console.error("[v0] Text extraction failed:", extractResult.error)
+          }
+        })
+
         setUploadSuccess(true)
         setTitle("")
         if (inputFileRef.current) inputFileRef.current.value = ""

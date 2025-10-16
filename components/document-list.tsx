@@ -4,7 +4,7 @@ import type React from "react"
 
 import { formatDistanceToNow } from "date-fns"
 import { ko } from "date-fns/locale"
-import { FileText, Trash2 } from "lucide-react"
+import { FileText, Trash2, FileSearch, Eye } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
 import { deleteDocument } from "@/app/actions/documents"
@@ -26,6 +26,7 @@ interface DocumentListProps {
 
 export function DocumentList({ documents }: DocumentListProps) {
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [extractingId, setExtractingId] = useState<number | null>(null)
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.preventDefault() // Link 클릭 방지
@@ -42,6 +43,79 @@ export function DocumentList({ documents }: DocumentListProps) {
     } else {
       alert(result.error)
       setDeletingId(null)
+    }
+  }
+
+  const handleExtractText = async (e: React.MouseEvent, doc: Document) => {
+    e.preventDefault()
+
+    setExtractingId(doc.id)
+
+    try {
+      console.log("[v0] Starting text extraction for document:", doc.id)
+
+      const pdfjsLib = await import("pdfjs-dist")
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
+
+      console.log("[v0] Loading PDF from:", doc.blob_url)
+
+      const loadingTask = pdfjsLib.getDocument({
+        url: doc.blob_url,
+        useWorkerFetch: false,
+        isEvalSupported: false,
+        useSystemFonts: true,
+      })
+      const pdf = await loadingTask.promise
+
+      console.log("[v0] PDF loaded, total pages:", pdf.numPages)
+
+      const pagesData: { pageNumber: number; text: string }[] = []
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum)
+        const textContent = await page.getTextContent()
+        const pageText = textContent.items.map((item: any) => item.str).join(" ")
+
+        if (pageText.trim()) {
+          pagesData.push({ pageNumber: pageNum, text: pageText })
+        }
+      }
+
+      if (pagesData.length === 0) {
+        alert(
+          "이 PDF에서 텍스트를 추출할 수 없습니다.\n\n" +
+            "가능한 원인:\n" +
+            "1. 스캔본 PDF (이미지로만 구성)\n" +
+            "2. 텍스트 레이어가 없는 PDF\n\n" +
+            "OCR 기능이 필요합니다.",
+        )
+        setExtractingId(null)
+        return
+      }
+
+      const response = await fetch("/api/save-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          documentId: doc.id,
+          pages: pagesData,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        alert(`텍스트 추출 완료! ${result.pagesProcessed}개 페이지 처리됨`)
+        window.location.reload()
+      } else {
+        alert(`오류: ${result.error}`)
+      }
+    } catch (error) {
+      console.error("[v0] Extract text error:", error)
+      alert(`텍스트 추출 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setExtractingId(null)
     }
   }
 
@@ -77,6 +151,21 @@ export function DocumentList({ documents }: DocumentListProps) {
                   </span>
                 </div>
               </div>
+              <Link href={`/documents/${doc.id}/text`} onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="shrink-0" title="추출된 텍스트 보기">
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => handleExtractText(e, doc)}
+                disabled={extractingId === doc.id}
+                className="shrink-0"
+                title="텍스트 추출"
+              >
+                <FileSearch className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

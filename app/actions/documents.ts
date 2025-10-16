@@ -58,3 +58,25 @@ export async function deleteDocument(id: number) {
     return { success: false, error: "문서 삭제에 실패했습니다." }
   }
 }
+
+export async function getDocumentPages(documentId: number) {
+  try {
+    const pages = await sql`
+      SELECT 
+        page_number,
+        extracted_text
+      FROM document_pages
+      WHERE document_id = ${documentId}
+      ORDER BY page_number ASC
+    `
+
+    const [document] = await sql`
+      SELECT title FROM documents WHERE id = ${documentId}
+    `
+
+    return { success: true, pages, documentTitle: document?.title }
+  } catch (error) {
+    console.error("[v0] Get document pages error:", error)
+    return { success: false, error: "페이지 데이터를 불러오는데 실패했습니다." }
+  }
+}
